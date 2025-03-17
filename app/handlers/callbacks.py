@@ -6,11 +6,11 @@ from aiogram.types import CallbackQuery
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.common import ChangeUserRole, DeleteDomain, CloudFlareTokens, CloudFlareDeleteTokens
-from bot.db.models import Users, Domains, Settings
-from bot.keyboards import remove_keyboard, confirmation_keyboard
-from bot.bot import bot
-from bot.config_reader import config
+from app.common import ChangeUserRole, DeleteDomain, CloudFlareTokens, CloudFlareDeleteTokens
+from app.db.models import Users, Domains, Settings
+from app.keyboards import remove_keyboard, confirmation_keyboard
+from app.bot import bot
+from app.config_reader import config
 
 router = Router(name="callbacks-router")
 

@@ -6,10 +6,10 @@ from aiogram.types import TelegramObject, Message, User
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy import select
 
-from bot.db.models import Users
-from bot.config_reader import config
-from bot.bot import bot, scheduler
-from bot.cron import new_user_notification
+from app.db.models import Users
+from app.config_reader import config
+from app.bot import bot, scheduler
+from app.cron import new_user_notification
 
 
 class CustomMessage(Message):

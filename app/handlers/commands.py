@@ -1,19 +1,20 @@
 from asyncio import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from textwrap import dedent
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
-from pytz import UTC
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.bot import bot, scheduler
-from bot.db.models import Domains, Users, Settings
-from bot.keyboards import change_role, delete_domain_inline, remove_cloudflare_token
-from bot.whois import get_expired_date
-from bot.cron import check_cloud_token, pull_all_domains
+from app.bot import bot, scheduler
+from app.cron import check_cloud_token, pull_all_domains
+from app.db.models import Domains, Settings, Users
+from app.keyboards import (change_role, delete_domain_inline,
+                           remove_cloudflare_token)
+from app.whois import get_expired_date
+
 router = Router(name="commands-router")
 
 @router.message(CommandStart())
@@ -58,7 +59,7 @@ async def get_domains(message: Message, session: AsyncSession):
     count = 0
     empty = True
     for domain in domains:
-        date_difference = domain.expired_date.replace(tzinfo=UTC) - datetime.now(UTC)
+        date_difference = domain.expired_date.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
         msg += '<code>{}</code> {:%d.%m.%Y} [ {}{} day ]\n'.format(str(domain.domain).ljust(20), domain.expired_date, '❗️' if date_difference.days < 30 else '', date_difference.days)
 
         count = count + 1
@@ -224,9 +225,9 @@ async def add_domains(message: Message, session: AsyncSession):
                 user_id = id,
                 domain = domain,
                 expired_date = expires_date,
-                last_check = datetime.now(UTC),
+                last_check = datetime.now(timezone.utc),
             ))
-            date_difference = expires_date - datetime.now(UTC)
+            date_difference = expires_date - datetime.now(timezone.utc)
             msg += '<code>{}</code>: {:%d.%m.%Y} [ {}{} day ]\n'.format(domain, expires_date, '❗️' if date_difference.days < 30 else '', date_difference.days)
             added_domains.append(domain)
         else:

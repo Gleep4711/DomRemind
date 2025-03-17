@@ -1,15 +1,14 @@
-import requests
 from asyncio import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
+import requests
 from aiogram import Bot
-from pytz import UTC
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from bot.db.models import Domains, Settings
-from bot.config_reader import config
-from bot.whois import get_expired_date
+from app.config_reader import config
+from app.db.models import Domains, Settings
+from app.whois import get_expired_date
 
 
 async def notifications(bot: Bot, session_pool:async_sessionmaker[AsyncSession]):
@@ -20,20 +19,20 @@ async def notifications(bot: Bot, session_pool:async_sessionmaker[AsyncSession])
     async with session_pool() as session:
         domains = (await session.execute(select(Domains))).scalars()
         for domain in domains:
-            last_difference = datetime.now(UTC) - domain.last_check.replace(tzinfo=UTC)
+            last_difference = datetime.now(timezone.utc) - domain.last_check.replace(tzinfo=timezone.utc)
             if last_difference.total_seconds() < 300:
                 continue
 
-            date_difference = domain.expired_date.replace(tzinfo=UTC) - datetime.now(UTC)
+            date_difference = domain.expired_date.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
             if date_difference.days > 60:
                 continue
 
             expires_date = await get_expired_date(domain.domain)
             if expires_date:
-                update_data = {'expired_date': expires_date, 'last_check': datetime.now(UTC)}
+                update_data = {'expired_date': expires_date, 'last_check': datetime.now(timezone.utc)}
                 await session.execute(update(Domains).filter(Domains.domain == domain.domain).values(update_data))
                 await session.commit()
-                new_date_difference = expires_date - datetime.now(UTC)
+                new_date_difference = expires_date - datetime.now(timezone.utc)
                 if new_date_difference.days < 60:
                     msg = '❗️ <code>{}</code> [ {:%d.%m.%Y} ] left: {} day ❗️'.format(domain.domain, domain.expired_date, date_difference.days)
                     await send_message_all_users_with_a_domain(msg, domain.domain, bot, session)
@@ -119,11 +118,11 @@ async def pull_all_domains(token: str, user_id: int, bot: Bot, session: AsyncSes
                 user_id = user_id,
                 domain = domain_name,
                 expired_date = expires_date,
-                last_check = datetime.now(UTC),
+                last_check = datetime.now(timezone.utc),
             ))
             added_domains.append(domain_name)
 
-            date_difference = expires_date - datetime.now(UTC)
+            date_difference = expires_date - datetime.now(timezone.utc)
             if date_difference.days < 30:
                 msg = '<code>{}</code>: {:%d.%m.%Y} [ {}{} day ]\n'.format(domain_name, expires_date, '❗️', date_difference.days)
                 try:

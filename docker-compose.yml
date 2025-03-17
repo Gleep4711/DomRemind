@@ -1,14 +1,12 @@
 version: '3.8'
 services:
     dom_remind_bot:
-        image: dom_remind_bot
+        build: .
+        container_name: dom_remind_bot
+
         restart: on-failure:5
         environment:
             - BOT_TOKEN
-            - DB_HOST
-            - DB_USER
-            - DB_PASS
-            - DB_NAME
             - DB_URL
         depends_on:
             - db

@@ -1,6 +1,6 @@
 from sqlalchemy import Column, BigInteger, String, DateTime, Sequence
 
-from bot.db.base import Base
+from app.db.base import Base
 
 
 class Users(Base):

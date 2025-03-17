@@ -1,8 +1,9 @@
-from whodap import aio_lookup_domain
-from dateutil.parser import parse
-from pytz import UTC
-from whois21 import WHOIS
 from asyncio import to_thread
+from datetime import timezone
+
+from dateutil.parser import parse
+from whodap import aio_lookup_domain
+from whois21 import WHOIS
 
 records = [
     'expires    on',
@@ -70,7 +71,7 @@ async def get_whois_21(d_data):
         return None
     for key in w.whois_data:
         if key.lower() in records:
-            return parse(str(w.whois_data[key])).replace(tzinfo=UTC)
+            return parse(str(w.whois_data[key])).replace(tzinfo=timezone.utc)
     print('\n\nget_whois_21 not expired date\n{}\n{}\n\n'.format(domain, w.whois_data))
     return None
 
@@ -84,7 +85,7 @@ async def get_whodap(d_data):
                 if ev.eventAction.lower() in records:
                     expires_date = ev.eventDate
                     break
-        return parse(str(expires_date)).replace(tzinfo=UTC)
+        return parse(str(expires_date)).replace(tzinfo=timezone.utc)
     except Exception as e:
         print('\n\nget_whodap {}\n{}\n\n'.format(d_data, e))
         return await get_whois_21(d_data)

@@ -12,12 +12,12 @@ from aiogram.types import Message
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from bot.config_reader import config
-from bot.handlers import commands, callbacks
-from bot.middlewares import DbSessionMiddleware
-from bot.ui_commands import set_ui_commands
-from bot.bot import bot, dp, scheduler
-from bot.cron import notifications, cloudflare_sync
+from app.config_reader import config
+from app.handlers import commands, callbacks
+from app.middlewares import DbSessionMiddleware
+from app.ui_commands import set_ui_commands
+from app.bot import bot, dp, scheduler
+from app.cron import notifications, cloudflare_sync
 
 F: Message
 

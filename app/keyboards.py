@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.common import ChangeUserRole, DeleteDomain, CloudFlareTokens, CloudFlareDeleteTokens
+from app.common import ChangeUserRole, DeleteDomain, CloudFlareTokens, CloudFlareDeleteTokens
 
 
 def change_role(roles) -> InlineKeyboardMarkup:
