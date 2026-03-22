@@ -19,6 +19,9 @@ async def notifications(bot: Bot, session_pool:async_sessionmaker[AsyncSession])
     async with session_pool() as session:
         domains = (await session.execute(select(Domains))).scalars()
         for domain in domains:
+            if domain.last_check is None or domain.expired_date is None or domain.domain is None:
+                continue
+
             last_difference = datetime.now(timezone.utc) - domain.last_check.replace(tzinfo=timezone.utc)
             if last_difference.total_seconds() < 300:
                 continue
@@ -50,11 +53,11 @@ async def send_message_all_users_with_a_domain(msg: str, domain_name: str, bot: 
         try:
             await bot.send_message(chat_id=domain.user_id, text=msg)
         except:
-            await bot.send_message(chat_id=config.admin, text='Error send message\nuser id: {}\ndomain: {}'.format(domain.user_id, domain.domain))
+            await bot.send_message(chat_id=config.ADMIN, text='Error send message\nuser id: {}\ndomain: {}'.format(domain.user_id, domain.domain))
         await sleep(1)
 
 async def new_user_notification(bot: Bot, msg: str):
-    await bot.send_message(chat_id=config.admin, text=msg)
+    await bot.send_message(chat_id=config.ADMIN, text=msg)
 
 async def check_cloud_token(token: str):
     message: dict
@@ -128,7 +131,7 @@ async def pull_all_domains(token: str, user_id: int, bot: Bot, session: AsyncSes
                 try:
                     await bot.send_message(chat_id=user_id, text=msg)
                 except:
-                    await bot.send_message(chat_id=config.admin, text='Error send message\nuser id: {}\ntoken: {}\ndomain: {}'.format(user_id, token, domain_name))
+                    await bot.send_message(chat_id=config.ADMIN, text='Error send message\nuser id: {}\ntoken: {}\ndomain: {}'.format(user_id, token, domain_name))
         else:
             await bot.send_message(chat_id=user_id, text='Error: Failed to get information about the domain: <code>{}</code>'.format(domain_name))
         await sleep(1)
@@ -152,6 +155,8 @@ async def cloudflare_sync(bot: Bot, session_pool:async_sessionmaker[AsyncSession
     async with session_pool() as session:
         tokens = (await session.execute(select(Settings).filter(Settings.name == 'token', Settings.group == 'cloudflare'))).scalars()
         for token in tokens:
+            if token.param is None:
+                continue
             await pull_all_domains(token.param, token.user_id, bot, session)
             await sleep(5)
 
@@ -159,4 +164,4 @@ async def send_error_sync_message(bot: Bot, user_id: int, token: str):
     try:
         await bot.send_message(chat_id=user_id, text='Error sync, token {}...'.format(token[0:4]))
     except:
-        await bot.send_message(chat_id=config.admin, text='Error send message\nuser id: {}\ntoken: {}'.format(user_id, token))
+        await bot.send_message(chat_id=config.ADMIN, text='Error send message\nuser id: {}\ntoken: {}'.format(user_id, token))

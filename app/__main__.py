@@ -1,11 +1,4 @@
-import asyncio, os
-
-# pre install
-os.system('alembic upgrade heads')
-
-# debugging
-# os.system('pip install --upgrade pip')
-# os.system('pip install -r requirements.txt')
+import asyncio
 
 from aiogram import F
 from aiogram.types import Message
@@ -19,10 +12,8 @@ from app.ui_commands import set_ui_commands
 from app.bot import bot, dp, scheduler
 from app.cron import notifications, cloudflare_sync
 
-F: Message
-
 async def main():
-    engine = create_async_engine(url=config.db_url, echo=True)
+    engine = create_async_engine(url=str(config.DB_URL), echo=True)
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 
     # Setup dispatcher and bind routers to it

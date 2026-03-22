@@ -1,4 +1,8 @@
-from sqlalchemy import Column, BigInteger, String, DateTime, Sequence
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import BigInteger, DateTime, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
@@ -6,35 +10,35 @@ from app.db.base import Base
 class Users(Base):
     __tablename__ = 'users'
 
-    id = Column(BigInteger, primary_key=True, unique=True, autoincrement=False)
-    role = Column(String, default='user')
-    state = Column(String, default='')
-    is_bot = Column(String, default='')
-    first_name = Column(String, default='')
-    last_name = Column(String, default='')
-    username = Column(String, default='')
-    language_code = Column(String, default='')
-    is_premium = Column(String, default='')
-    added_to_attachment_menu = Column(String, default='')
-    can_join_groups = Column(String, default='')
-    can_read_all_group_messages = Column(String, default='')
-    supports_inline_queries = Column(String, default='')
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True, autoincrement=False)
+    role: Mapped[Optional[str]] = mapped_column(String, default='user')
+    state: Mapped[Optional[str]] = mapped_column(String, default='')
+    is_bot: Mapped[Optional[str]] = mapped_column(String, default='')
+    first_name: Mapped[Optional[str]] = mapped_column(String, default='')
+    last_name: Mapped[Optional[str]] = mapped_column(String, default='')
+    username: Mapped[Optional[str]] = mapped_column(String, default='')
+    language_code: Mapped[Optional[str]] = mapped_column(String, default='')
+    is_premium: Mapped[Optional[str]] = mapped_column(String, default='')
+    added_to_attachment_menu: Mapped[Optional[str]] = mapped_column(String, default='')
+    can_join_groups: Mapped[Optional[str]] = mapped_column(String, default='')
+    can_read_all_group_messages: Mapped[Optional[str]] = mapped_column(String, default='')
+    supports_inline_queries: Mapped[Optional[str]] = mapped_column(String, default='')
 
 class Domains(Base):
     __tablename__ = 'domains'
 
-    id = Column(BigInteger, primary_key=True, unique=True, autoincrement=True)
-    user_id = Column(BigInteger)
-    domain = Column(String, default = '')
-    expired_date = Column(DateTime, default = '')
-    last_check = Column(DateTime, default = '')
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    domain: Mapped[Optional[str]] = mapped_column(String, default='')
+    expired_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    last_check: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 
 class Settings(Base):
     __tablename__ = 'settings'
 
-    id = Column(BigInteger, primary_key=True, unique=True, autoincrement=True)
-    user_id = Column(BigInteger)
-    name = Column(String, default = '')
-    group = Column(String, default = '')
-    param = Column(String, default = '')
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    name: Mapped[Optional[str]] = mapped_column(String, default='')
+    group: Mapped[Optional[str]] = mapped_column(String, default='')
+    param: Mapped[Optional[str]] = mapped_column(String, default='')

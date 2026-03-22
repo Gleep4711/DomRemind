@@ -1,16 +1,22 @@
-version: '3.8'
 services:
     dom_remind_bot:
         build: .
         container_name: dom_remind_bot
 
-        restart: on-failure:5
+        # restart: on-failure:5
         environment:
-            - BOT_TOKEN
-            - DB_URL
-        depends_on:
-            - db
+            BOT_TOKEN: ${BOT_TOKEN}
+            DB_URL: ${DB_URL}
+            ADMIN: ${ADMIN}
+
+            LOGGING: ${LOGGING:-ERROR}
+
         volumes:
-            - ./:/app
-volumes:
-    postgres:
+            - ./app:/code/app
+
+        networks:
+            - main
+
+networks:
+    main:
+        external: true
