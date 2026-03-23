@@ -1,6 +1,6 @@
 services:
     dom_remind_bot:
-        build: .
+        build: ..
         container_name: dom_remind_bot
 
         restart: unless-stopped
