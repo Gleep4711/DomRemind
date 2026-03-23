@@ -1,0 +1,19 @@
+services:
+    dom_remind_bot:
+        build: .
+        container_name: dom_remind_bot
+
+        restart: unless-stopped
+        environment:
+            BOT_TOKEN: ${BOT_TOKEN}
+            DB_URL: ${DB_URL}
+            ADMIN: ${ADMIN}
+
+            LOGGING: error
+
+        networks:
+            - main
+
+networks:
+    main:
+        external: true
