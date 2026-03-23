@@ -8,6 +8,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import bot
+from app.db.repositories import domains as domain_repo
 from app.db.repositories import users as user_repo
 from app.keyboards import change_role, delete_domain_inline, remove_reply_keyboard
 from app.services.cron import verify_and_add_token
@@ -61,6 +62,7 @@ async def cmd_start(message: Message, role: str, session: AsyncSession):
 
             <b>Admin</b>
             /get_users List of all users
+            /get_stats Show summary statistics
         ''')
 
     await message.answer(msg)
@@ -72,11 +74,16 @@ async def get_users(message: Message, session: AsyncSession, role: str):
         return
 
     users = await user_repo.get_all_users(session)
+    domain_counts = await domain_repo.get_domain_counts_by_user(session)
     users_answer = []
     for user in users:
         user_name = '{} {}'.format(user.first_name, user.last_name).replace('<', '').replace('.', ' ')
-        msg = '<code>{}</code> <a href="tg://user?id={}">{}</a> {}'.format(
-            user.id, user.id, user_name, user.role
+        msg = '<code>{}</code> <a href="tg://user?id={}">{}</a> {} | domains: <code>{}</code>'.format(
+            user.id,
+            user.id,
+            user_name,
+            user.role,
+            domain_counts.get(user.id, 0),
         )
         users_answer.append(msg)
         if len(users_answer) >= 10:
@@ -86,6 +93,43 @@ async def get_users(message: Message, session: AsyncSession, role: str):
 
     if len(users_answer) > 0:
         await message.answer('\n'.join(users_answer))
+
+
+@router.message(Command('get_stats'))
+async def get_stats(message: Message, session: AsyncSession, role: str):
+    if role != 'admin':
+        return
+
+    users = await user_repo.get_all_users(session)
+    domain_stats = await domain_repo.get_domain_statistics(session)
+    role_counts: dict[str, int] = {'guest': 0, 'user': 0, 'admin': 0}
+    for user in users:
+        if user.role:
+            role_counts[user.role] = role_counts.get(user.role, 0) + 1
+
+    msg = dedent('''
+        <b>General statistics</b>
+
+        <b>Users</b>
+        Total: <code>{users_total}</code>
+        Guests: <code>{guests}</code>
+        Users: <code>{users}</code>
+        Admins: <code>{admins}</code>
+
+        <b>Domains</b>
+        Unique domains: <code>{total_domains}</code>
+        User-domain links: <code>{total_links}</code>
+        Users with domains: <code>{users_with_domains}</code>
+    ''').format(
+        users_total=len(users),
+        guests=role_counts.get('guest', 0),
+        users=role_counts.get('user', 0),
+        admins=role_counts.get('admin', 0),
+        total_domains=domain_stats['total_domains'],
+        total_links=domain_stats['total_links'],
+        users_with_domains=domain_stats['users_with_domains'],
+    )
+    await message.answer(msg)
 
 
 @router.message(F.text.regexp(r'^\d*$'))

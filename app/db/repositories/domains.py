@@ -104,3 +104,22 @@ async def get_users_for_domain(session: AsyncSession, domain_name: str) -> list[
         .filter(Domains.domain == domain_name)
     )
     return list(result.scalars())
+
+
+async def get_domain_counts_by_user(session: AsyncSession) -> dict[int, int]:
+    result = await session.execute(
+        select(UserDomain.user_id, func.count(UserDomain.domain_id))
+        .group_by(UserDomain.user_id)
+    )
+    return {int(user_id): int(domain_count) for user_id, domain_count in result.all()}
+
+
+async def get_domain_statistics(session: AsyncSession) -> dict[str, int]:
+    total_links = await session.execute(select(func.count()).select_from(UserDomain))
+    total_domains = await session.execute(select(func.count()).select_from(Domains))
+    users_with_domains = await session.execute(select(func.count(func.distinct(UserDomain.user_id))))
+    return {
+        'total_links': int(total_links.scalar_one()),
+        'total_domains': int(total_domains.scalar_one()),
+        'users_with_domains': int(users_with_domains.scalar_one()),
+    }
