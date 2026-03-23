@@ -23,6 +23,7 @@ class Users(Base):
     can_join_groups: Mapped[Optional[str]] = mapped_column(String, default='')
     can_read_all_group_messages: Mapped[Optional[str]] = mapped_column(String, default='')
     supports_inline_queries: Mapped[Optional[str]] = mapped_column(String, default='')
+    blocked_until: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 class Domains(Base):
     __tablename__ = 'domains'

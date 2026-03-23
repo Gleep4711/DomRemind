@@ -2,11 +2,13 @@ STATE_NONE = ''
 STATE_ADD_DOMAIN = 'add_domain'
 STATE_REMOVE_DOMAIN = 'remove_domain'
 STATE_ADD_CLOUD_TOKEN = 'add_cloud_token'
+STATE_SUPPORT = 'support'
 
 INPUT_STATES = (
     STATE_ADD_DOMAIN,
     STATE_REMOVE_DOMAIN,
     STATE_ADD_CLOUD_TOKEN,
+    STATE_SUPPORT,
 )
 
 CANCEL_TEXT = '❌ Cancel'

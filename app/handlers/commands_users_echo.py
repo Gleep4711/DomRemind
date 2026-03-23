@@ -1,4 +1,5 @@
 from asyncio import sleep
+from datetime import datetime, timedelta
 import logging
 from textwrap import dedent
 
@@ -8,9 +9,10 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import bot
+from app.config_reader import config
 from app.db.repositories import domains as domain_repo
 from app.db.repositories import users as user_repo
-from app.keyboards import change_role, delete_domain_inline, remove_reply_keyboard
+from app.keyboards import cancel_reply_keyboard, change_role, delete_domain_inline, remove_reply_keyboard
 from app.services.cron import verify_and_add_token
 from app.services.domain_service import DOMAIN_LIMIT, add_domains as svc_add_domains, get_domain_for_deletion
 from app.states import (
@@ -20,9 +22,12 @@ from app.states import (
     STATE_ADD_DOMAIN,
     STATE_NONE,
     STATE_REMOVE_DOMAIN,
+    STATE_SUPPORT,
 )
 
 router = Router(name="commands-users-echo-router")
+SUPPORT_COOLDOWN = timedelta(seconds=30)
+_support_last_message_at: dict[int, datetime] = {}
 
 
 def _message_user_id(message: Message) -> int | None:
@@ -43,6 +48,7 @@ async def cmd_start(message: Message, role: str, session: AsyncSession):
         /add_domain Add new domains
         /get_domains Show all domains
         /remove_domains Delete domain
+        /support Contact support
     ''').format(role=role_str)
 
     if role == 'guest':
@@ -85,6 +91,8 @@ async def get_users(message: Message, session: AsyncSession, role: str):
             user.role,
             domain_counts.get(user.id, 0),
         )
+        if user_repo.is_user_blocked(user):
+            msg += ' | blocked: <code>{}</code>'.format(user_repo.user_block_status_text(user))
         users_answer.append(msg)
         if len(users_answer) >= 10:
             await message.answer('\n'.join(users_answer))
@@ -132,6 +140,25 @@ async def get_stats(message: Message, session: AsyncSession, role: str):
     await message.answer(msg)
 
 
+@router.message(Command('support'))
+async def support(message: Message, session: AsyncSession):
+    user_id = _message_user_id(message)
+    if user_id is None:
+        return
+
+    user = await user_repo.get_user(session, user_id)
+    if user_repo.is_user_blocked(user):
+        return await message.answer(
+            'You are blocked ({}) and cannot use support.'.format(
+                user_repo.user_block_status_text(user)
+            )
+        )
+
+    await user_repo.set_user_state(session, user_id, STATE_SUPPORT)
+    await session.commit()
+    await message.answer('Write your message for support:', reply_markup=cancel_reply_keyboard())
+
+
 @router.message(F.text.regexp(r'^\d*$'))
 async def user_id_handler(message: Message, session: AsyncSession, role: str):
     if role != 'admin':
@@ -155,13 +182,18 @@ async def user_id_handler(message: Message, session: AsyncSession, role: str):
     last_name = user.last_name or ''
 
     await message.answer(
-        '{} {}\nCurrent role: {}\n'
+        '{} {}\nCurrent role: {}\nBlocked: {}\n'
         '<code>'
         'Guest - access domains only\n'
         'User - access domains and Cloudflare\n'
         'Admin - access user manager'
-        '</code>'.format(first_name, last_name, user.role),
-        reply_markup=change_role(roles),
+        '</code>'.format(
+            first_name,
+            last_name,
+            user.role,
+            user_repo.user_block_status_text(user),
+        ),
+        reply_markup=change_role(roles, text, user_repo.is_user_blocked(user)),
     )
 
 
@@ -193,7 +225,17 @@ async def echo(message: Message, session: AsyncSession, state: str, role: str):
         await user_repo.set_user_state(session, user_id, STATE_NONE)
         await session.commit()
 
+    user = await user_repo.get_user(session, user_id)
+    blocked = user_repo.is_user_blocked(user)
+
     if state == STATE_ADD_DOMAIN:
+        if blocked:
+            return await message.answer(
+                'You are blocked ({}) and cannot add domains.'.format(
+                    user_repo.user_block_status_text(user)
+                ),
+                reply_markup=remove_reply_keyboard(),
+            )
         await message.answer('running.... 🏃')
         await svc_add_domains(session, user_id, role, text, message.answer)
         return
@@ -214,7 +256,43 @@ async def echo(message: Message, session: AsyncSession, state: str, role: str):
         return
 
     if state == STATE_ADD_CLOUD_TOKEN:
+        if blocked:
+            return await message.answer(
+                'You are blocked ({}) and cannot add Cloudflare tokens.'.format(
+                    user_repo.user_block_status_text(user)
+                ),
+                reply_markup=remove_reply_keyboard(),
+            )
         await verify_and_add_token(session, user_id, text, message.answer, bot)
+        return
+
+    if state == STATE_SUPPORT:
+        if blocked:
+            return await message.answer(
+                'You are blocked ({}) and cannot use support.'.format(
+                    user_repo.user_block_status_text(user)
+                ),
+                reply_markup=remove_reply_keyboard(),
+            )
+        now = datetime.utcnow()
+        last_message_at = _support_last_message_at.get(user_id)
+        if last_message_at and (now - last_message_at) < SUPPORT_COOLDOWN:
+            wait_seconds = int((SUPPORT_COOLDOWN - (now - last_message_at)).total_seconds())
+            return await message.answer(
+                'Anti-spam: wait {} seconds before next support message.'.format(wait_seconds),
+                reply_markup=remove_reply_keyboard(),
+            )
+        _support_last_message_at[user_id] = now
+        await bot.send_message(
+            chat_id=config.ADMIN,
+            text=(
+                '<b>Support request</b>\n'
+                'From: <a href="tg://user?id={id}">{id}</a>\n'
+                'Role: <code>{role}</code>\n\n'
+                '{text}'
+            ).format(id=user_id, role=role, text=text),
+        )
+        await message.answer('Your message has been sent to support.', reply_markup=remove_reply_keyboard())
         return
 
     logging.error('Error: Unknown command. State: %s Text: %s', state, str(message.text)[:128])

@@ -7,10 +7,28 @@ from app.common import ChangeUserRole, DeleteDomain, CloudFlareTokens, CloudFlar
 from app.states import CANCEL_TEXT
 
 
-def change_role(roles) -> InlineKeyboardMarkup:
+def change_role(roles, user_id: str, is_blocked: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for item in roles:
-        builder.button(text='Change to {}'.format(item['new_role']), callback_data=ChangeUserRole(data='{}@{}'.format(item['id'], item['new_role'])).pack())
+        builder.button(
+            text='Change to {}'.format(item['new_role']),
+            callback_data=ChangeUserRole(
+                data='r@{}@{}'.format(item['id'], item['new_role'])
+            ).pack(),
+        )
+    builder.button(
+        text='Block for 1 day',
+        callback_data=ChangeUserRole(data='bd@{}'.format(user_id)).pack(),
+    )
+    builder.button(
+        text='Block permanently',
+        callback_data=ChangeUserRole(data='bp@{}'.format(user_id)).pack(),
+    )
+    if is_blocked:
+        builder.button(
+            text='Unblock',
+            callback_data=ChangeUserRole(data='u@{}'.format(user_id)).pack(),
+        )
     builder.button(text='Cancel', callback_data=ChangeUserRole(data='canceled').pack())
     return cast(InlineKeyboardMarkup, builder.adjust(2).as_markup())
 

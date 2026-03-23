@@ -1,4 +1,5 @@
 from contextlib import suppress
+from datetime import datetime, timedelta
 
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
@@ -32,22 +33,87 @@ async def change_user_role_callback(callback: CallbackQuery, session: AsyncSessi
         if not requester or requester.role != 'admin':
             answer = 'access denied'
         else:
-            id, role = text[1].split('@')
-            if int(id) == config.ADMIN:
+            action = text[1]
+            if action.startswith('r@'):
+                _, id, role = action.split('@', maxsplit=2)
+                target_id = int(id)
+                action_type = 'role'
+            elif action.startswith('bd@'):
+                _, id = action.split('@', maxsplit=1)
+                target_id = int(id)
+                role = ''
+                action_type = 'block_day'
+            elif action.startswith('bp@'):
+                _, id = action.split('@', maxsplit=1)
+                target_id = int(id)
+                role = ''
+                action_type = 'block_permanent'
+            elif action.startswith('u@'):
+                _, id = action.split('@', maxsplit=1)
+                target_id = int(id)
+                role = ''
+                action_type = 'unblock'
+            # Backward compatibility for already-rendered keyboards
+            elif action.startswith('role:'):
+                id, role = action.removeprefix('role:').split('@')
+                target_id = int(id)
+                action_type = 'role'
+            elif action.startswith('block_day:'):
+                target_id = int(action.removeprefix('block_day:'))
+                role = ''
+                action_type = 'block_day'
+            elif action.startswith('block_permanent:'):
+                target_id = int(action.removeprefix('block_permanent:'))
+                role = ''
+                action_type = 'block_permanent'
+            elif action.startswith('unblock:'):
+                target_id = int(action.removeprefix('unblock:'))
+                role = ''
+                action_type = 'unblock'
+            else:
+                answer = 'invalid action'
+                with suppress(TelegramBadRequest):
+                    await callback.message.edit_text(answer, reply_markup=remove_keyboard())
+                return
+
+            if target_id == config.ADMIN:
                 answer = 'access denied'
             else:
-                target_user = await user_repo.get_user(session, int(id))
+                target_user = await user_repo.get_user(session, target_id)
                 if target_user:
-                    await user_repo.update_user_role(session, int(id), role)
-                    await session.commit()
                     msg = ''
-                    if role == 'guest':
-                        msg = 'Your role has been changed to guest. You still have access to domains, but Cloudflare features are unavailable.'
-                    if role == 'user':
-                        msg = 'You can now use domains and Cloudflare features\nUse the /add_domain or /add_cloud_token command'
-                    if role == 'admin':
-                        msg = 'Now you are Administrator, you can manage users\nUse /get_users command'
-                    await bot.send_message(int(id), msg)
+                    if action_type == 'role':
+                        await user_repo.update_user_role(session, target_id, role)
+                        if role == 'guest':
+                            msg = 'Your role has been changed to guest. You still have access to domains, but Cloudflare features are unavailable.'
+                        if role == 'user':
+                            msg = 'You can now use domains and Cloudflare features\nUse the /add_domain or /add_cloud_token command'
+                        if role == 'admin':
+                            msg = 'Now you are Administrator, you can manage users\nUse /get_users command'
+                    elif action_type == 'block_day':
+                        await user_repo.set_user_blocked_until(
+                            session,
+                            target_id,
+                            datetime.utcnow() + timedelta(days=1),
+                        )
+                        msg = 'You are blocked for 1 day. Domain deletion and notifications are still available.'
+                        answer = 'User blocked for 1 day'
+                    elif action_type == 'block_permanent':
+                        await user_repo.set_user_blocked_until(
+                            session,
+                            target_id,
+                            user_repo.PERMANENT_BLOCK_UNTIL,
+                        )
+                        msg = 'You are blocked permanently. Domain deletion and notifications are still available.'
+                        answer = 'User blocked permanently'
+                    elif action_type == 'unblock':
+                        await user_repo.set_user_blocked_until(session, target_id, None)
+                        msg = 'You are unblocked.'
+                        answer = 'User unblocked'
+
+                    await session.commit()
+                    if msg:
+                        await bot.send_message(target_id, msg)
                 else:
                     answer = 'User not found'
 

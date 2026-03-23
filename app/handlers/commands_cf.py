@@ -24,6 +24,13 @@ async def add_cloud_token(message: Message, session: AsyncSession, role: str):
     user_id = _message_user_id(message)
     if user_id is None:
         return
+    user = await user_repo.get_user(session, user_id)
+    if user_repo.is_user_blocked(user):
+        return await message.answer(
+            'You are blocked ({}) and cannot add Cloudflare tokens.'.format(
+                user_repo.user_block_status_text(user)
+            )
+        )
     await user_repo.set_user_state(session, user_id, STATE_ADD_CLOUD_TOKEN)
     await session.commit()
     await message.answer('Enter cloudflare token', reply_markup=cancel_reply_keyboard())
