@@ -6,11 +6,11 @@ from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.config_reader import config
-from app.handlers import commands, callbacks
+from app.handlers import callbacks, commands_cf, commands_domains, commands_users_echo
 from app.middlewares import DbSessionMiddleware
 from app.ui_commands import set_ui_commands
 from app.bot import bot, dp, scheduler
-from app.cron import notifications, cloudflare_sync
+from app.services.cron import notifications, cloudflare_sync
 
 async def main():
     engine = create_async_engine(url=str(config.DB_URL), echo=True)
@@ -24,7 +24,9 @@ async def main():
 
 
     # Register handlers
-    dp.include_router(commands.router)
+    dp.include_router(commands_domains.router)
+    dp.include_router(commands_cf.router)
+    dp.include_router(commands_users_echo.router)
     dp.include_router(callbacks.router)
 
     # Set bot commands in UI
@@ -34,6 +36,8 @@ async def main():
     scheduler.add_job(notifications, 'cron', hour=8, minute=0, args=(bot, sessionmaker))
     scheduler.add_job(cloudflare_sync, 'cron', hour=7, minute=30, args=(bot, sessionmaker))
     scheduler.start()
+
+    await bot.send_message(chat_id=config.ADMIN, text='Bot is starting...')
 
     # Run bot
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())

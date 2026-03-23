@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, DateTime, String
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -28,10 +28,16 @@ class Domains(Base):
     __tablename__ = 'domains'
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger)
     domain: Mapped[Optional[str]] = mapped_column(String, default='')
     expired_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_check: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class UserDomain(Base):
+    __tablename__ = 'user_domains'
+
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    domain_id: Mapped[int] = mapped_column(ForeignKey('domains.id', ondelete='CASCADE'), primary_key=True)
 
 
 class Settings(Base):

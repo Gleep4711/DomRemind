@@ -3,14 +3,16 @@ from contextlib import suppress
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common import ChangeUserRole, DeleteDomain, CloudFlareTokens, CloudFlareDeleteTokens
-from app.db.models import Users, Domains, Settings
+from app.db.repositories import domains as domain_repo
+from app.db.repositories import settings as settings_repo
+from app.db.repositories import users as user_repo
 from app.keyboards import remove_keyboard, confirmation_keyboard
 from app.bot import bot
 from app.config_reader import config
+from app.services.domain_service import remove_domain
 
 router = Router(name="callbacks-router")
 
@@ -26,18 +28,17 @@ async def change_user_role_callback(callback: CallbackQuery, session: AsyncSessi
     if text[1] == 'canceled':
         answer = 'Canceled'
     else:
-        sql_user = await session.execute(select(Users).filter(Users.id == callback.message.chat.id))
-        user = sql_user.first()
-        if not user or user[0].role != 'admin':
+        requester = await user_repo.get_user(session, callback.message.chat.id)
+        if not requester or requester.role != 'admin':
             answer = 'access denied'
         else:
             id, role = text[1].split('@')
             if int(id) == config.ADMIN:
                 answer = 'access denied'
             else:
-                sql = await session.execute(select(Users).filter(Users.id == int(id)))
-                if sql.first():
-                    await session.execute(update(Users).filter(Users.id == int(id)).values(role = role))
+                target_user = await user_repo.get_user(session, int(id))
+                if target_user:
+                    await user_repo.update_user_role(session, int(id), role)
                     await session.commit()
                     msg = ''
                     if role == 'guest':
@@ -46,7 +47,6 @@ async def change_user_role_callback(callback: CallbackQuery, session: AsyncSessi
                         msg = 'You can now add new domains\nUse the /add_domain command'
                     if role == 'admin':
                         msg = 'Now you are Administrator, you can manage users\nUse /get_users command'
-
                     await bot.send_message(int(id), msg)
                 else:
                     answer = 'User not found'
@@ -70,11 +70,21 @@ async def delete_domain_callback(callback: CallbackQuery, session: AsyncSession)
         return
 
     text = callback.data.split(':')
-    id, domain = text[1].split('@')
-    domain = domain.replace(';', ':')
+    id, domain_name = text[1].split('@')
+    domain_name = domain_name.replace(';', ':')
 
-    await session.execute(delete(Domains).filter(Domains.user_id == int(id), Domains.domain == domain))
-    await session.commit()
+    if callback.from_user.id != int(id):
+        with suppress(TelegramBadRequest):
+            await callback.message.edit_text('access denied', reply_markup=remove_keyboard())
+        return
+
+    domain_row = await domain_repo.get_domain_for_user(session, int(id), domain_name)
+    if not domain_row:
+        with suppress(TelegramBadRequest):
+            await callback.message.edit_text('Domain not found', reply_markup=remove_keyboard())
+        return
+
+    await remove_domain(session, int(id), domain_row.id)
 
     with suppress(TelegramBadRequest):
         await callback.message.edit_text('🫡', reply_markup=remove_keyboard())
@@ -87,7 +97,7 @@ async def cloudflare_token(callback: CallbackQuery, session: AsyncSession):
         return
 
     token_id = int(callback.data.split(':', maxsplit=1)[1])
-    token = (await session.execute(select(Settings).filter(Settings.id == token_id, Settings.user_id == callback.from_user.id, Settings.name == 'token', Settings.group == 'cloudflare'))).scalar()
+    token = await settings_repo.get_cf_token_by_id(session, token_id, callback.from_user.id)
     with suppress(TelegramBadRequest):
         await callback.message.edit_text(callback.message.text or '', reply_markup=remove_keyboard())
         if token:
@@ -105,10 +115,10 @@ async def delete_cloudflare_token(callback: CallbackQuery, session: AsyncSession
         return
 
     id = int(callback.data.split(':', maxsplit=1)[1])
-    token = (await session.execute(select(Settings).filter(Settings.id == id, Settings.user_id == callback.from_user.id, Settings.name == 'token', Settings.group == 'cloudflare'))).scalar()
+    token = await settings_repo.get_cf_token_by_id(session, id, callback.from_user.id)
     with suppress(TelegramBadRequest):
         if token:
-            await session.execute(delete(Settings).filter(Settings.id == token.id))
+            await settings_repo.delete_cf_token(session, token.id)
             await session.commit()
             await callback.message.edit_text('🫡', reply_markup=remove_keyboard())
         else:

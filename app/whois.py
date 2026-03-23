@@ -1,5 +1,7 @@
 from asyncio import to_thread
 from datetime import timezone
+import logging
+from typing import Any, cast
 
 from dateutil.parser import parse
 from whodap import aio_lookup_domain
@@ -54,7 +56,7 @@ async def get_expired_date(domain):
         else:
             return await get_whodap(d_data)
     except Exception as e:
-        print('\n\nget_expired_date {}\n{}\n\n'.format(domain, e))
+        logging.error(f"Error getting expired date for domain {domain}: {e}")
         return None
 
 
@@ -64,29 +66,33 @@ async def get_whois_21(d_data):
         # w = WHOIS(domain)
         w = await to_thread(WHOIS, domain)
     except Exception as e:
-        print('whois check {}'.format(domain), e)
+        logging.error(f"Error checking whois for domain {domain}: {e}")
         return None
     if not w.success:
-        print('\n\nget_whois_21 {}\n{}\n\n'.format(domain, w.error))
+        logging.error(f"WHOIS check failed for domain {domain}: {w.error}")
         return None
     for key in w.whois_data:
         if key.lower() in records:
             return parse(str(w.whois_data[key])).replace(tzinfo=timezone.utc)
-    print('\n\nget_whois_21 not expired date\n{}\n{}\n\n'.format(domain, w.whois_data))
+    logging.error(f"WHOIS check did not return an expiration date for domain {domain}: {w.whois_data}")
     return None
 
 async def get_whodap(d_data):
     try:
         w = await aio_lookup_domain(domain=d_data[-2], tld=d_data[-1])
-        info = w.to_whois_dict()
-        expires_date = info['expires_date']
-        if not info['expires_date']:
-            for ev in w.events:
-                if ev.eventAction.lower() in records:
-                    expires_date = ev.eventDate
-                    break
+        info = cast(dict[str, Any], w.to_whois_dict())
+        expires_date = info.get('expires_date')
+        if not expires_date:
+            events = w.events
+            if isinstance(events, (list, tuple)):
+                for ev in events:
+                    if ev.eventAction.lower() in records:
+                        expires_date = ev.eventDate
+                        break
+        if not expires_date:
+            return await get_whois_21(d_data)
         return parse(str(expires_date)).replace(tzinfo=timezone.utc)
     except Exception as e:
-        print('\n\nget_whodap {}\n{}\n\n'.format(d_data, e))
+        logging.error(f"Error getting whodap data for domain {d_data}: {e}")
         return await get_whois_21(d_data)
 

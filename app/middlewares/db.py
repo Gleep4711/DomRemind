@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta
 from typing import Callable, Awaitable, Dict, Any
 
 from aiogram import BaseMiddleware
@@ -8,8 +7,7 @@ from sqlalchemy import select
 
 from app.db.models import Users
 from app.config_reader import config
-from app.bot import bot, scheduler
-from app.cron import new_user_notification
+from app.bot import bot
 
 
 class DbSessionMiddleware(BaseMiddleware):
