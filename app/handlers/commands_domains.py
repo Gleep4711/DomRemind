@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import domains as domain_repo
 from app.db.repositories import users as user_repo
+from app.services.domain_service import DOMAIN_LIMIT
 
 router = Router(name="commands-domains-router")
 
@@ -23,7 +24,11 @@ async def add_domain(message: Message, session: AsyncSession):
         return
     await user_repo.set_user_state(session, user_id, 'add_domain')
     await session.commit()
-    await message.answer('Enter domains\nYou can enter several domains at once - one domain on one line, no spaces, no commas')
+    await message.answer(
+        'Enter domains\n'
+        'You can enter several domains at once - one domain on one line, no spaces, no commas\n'
+        'Limit: <code>{}</code> domains per user'.format(DOMAIN_LIMIT)
+    )
 
 
 @router.message(Command('get_domains'))

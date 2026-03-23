@@ -29,8 +29,6 @@ class DbSessionMiddleware(BaseMiddleware):
                 sql_user = await session.execute(select(Users).filter(Users.id == message.from_user.id))
                 user = sql_user.first()
                 if user:
-                    if user[0].role == 'guest':
-                        return
                     data['role'] = user[0].role
                     data['state'] = user[0].state
                 else:
@@ -57,21 +55,6 @@ class DbSessionMiddleware(BaseMiddleware):
                         message.from_user.first_name,
                         message.from_user.last_name
                     ))
-
-                    # scheduler.add_job(
-                    #     new_user_notification,
-                    #     'date',
-                    #     run_date=datetime.now() + timedelta(seconds=5),
-                    #     args=(
-                    #         bot,
-                    #         'New user <code>{}</code> <a href="tg://user?id={}">{} {}</a>'.format(
-                    #             event.message.from_user.id,
-                    #             event.message.from_user.id,
-                    #             event.message.from_user.first_name,
-                    #             event.message.from_user.last_name
-                    #         )
-                    #     )
-                    # )
 
             data['session'] = session
             return await handler(event, data)

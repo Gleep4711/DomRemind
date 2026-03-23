@@ -10,12 +10,24 @@ from app.db.repositories import domains as domain_repo
 from app.whois import get_expired_date
 
 
+DOMAIN_LIMIT = 10
+
+
 async def add_domains(
     session: AsyncSession,
     user_id: int,
     text: str,
     send_message: Callable[[str], Awaitable[Any]],
 ) -> None:
+    current_domains_count = await domain_repo.count_user_domains(session, user_id)
+    if current_domains_count >= DOMAIN_LIMIT:
+        await send_message(
+            'Domain limit reached: <code>{}</code> domains максимум на пользователя.'.format(
+                DOMAIN_LIMIT
+            )
+        )
+        return
+
     domains = text.split('\n')
     msg = ''
     added = False
@@ -37,6 +49,12 @@ async def add_domains(
         if await domain_repo.find_user_domain_link(session, user_id, domain):
             msg += '<code>{}</code> already exist\n'.format(domain)
             continue
+
+        if current_domains_count + len(added_domains) >= DOMAIN_LIMIT:
+            msg += 'Domain limit reached: <code>{}</code> domains максимум на пользователя.\n'.format(
+                DOMAIN_LIMIT
+            )
+            break
 
         domain_row = await domain_repo.get_domain_by_name(session, domain)
         expires_date = (

@@ -42,9 +42,9 @@ async def change_user_role_callback(callback: CallbackQuery, session: AsyncSessi
                     await session.commit()
                     msg = ''
                     if role == 'guest':
-                        msg = 'Something went wrong, you can no longer add new domains'
+                        msg = 'Your role has been changed to guest. You still have access to domains, but Cloudflare features are unavailable.'
                     if role == 'user':
-                        msg = 'You can now add new domains\nUse the /add_domain command'
+                        msg = 'You can now use domains and Cloudflare features\nUse the /add_domain or /add_cloud_token command'
                     if role == 'admin':
                         msg = 'Now you are Administrator, you can manage users\nUse /get_users command'
                     await bot.send_message(int(id), msg)

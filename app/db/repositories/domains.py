@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Domains, UserDomain
@@ -14,6 +14,15 @@ async def get_user_domains(session: AsyncSession, user_id: int) -> list[Domains]
         .order_by(Domains.expired_date)
     )
     return list(result.scalars())
+
+
+async def count_user_domains(session: AsyncSession, user_id: int) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(UserDomain)
+        .filter(UserDomain.user_id == user_id)
+    )
+    return int(result.scalar_one())
 
 
 async def find_user_domain_link(session: AsyncSession, user_id: int, domain_name: str) -> bool:

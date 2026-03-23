@@ -90,7 +90,7 @@ def check_cloud_token(token: str) -> str | bool:
 
 async def pull_all_domains(
     token: str, user_id: int, bot: Bot, session: AsyncSession, page: int = 1
-):
+) -> bool | int:
     try:
         response = requests.get(
             'https://api.cloudflare.com/client/v4/zones?page=' + str(page),
@@ -216,7 +216,7 @@ async def pull_all_domains(
         'pull_all_domains finished: user_id=%s page=%s added_count=%s',
         user_id, page, len(added_domains),
     )
-    return True
+    return len(added_domains)
 
 
 async def cloudflare_sync(bot: Bot, session_pool: async_sessionmaker[AsyncSession]):
@@ -262,4 +262,8 @@ async def verify_and_add_token(
     await settings_repo.add_cf_token(session, user_id, token)
     await session.commit()
     await send_message(str(check_result))
-    await pull_all_domains(token, user_id, bot, session)
+    domains_quantity = await pull_all_domains(token, user_id, bot, session)
+    if isinstance(domains_quantity, int):
+        await send_message('Sync finished, {} domains added'.format(domains_quantity))
+    elif domains_quantity is False:
+        await send_message('Sync finished with errors')
