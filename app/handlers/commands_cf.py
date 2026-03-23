@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import settings as settings_repo
 from app.db.repositories import users as user_repo
-from app.keyboards import remove_cloudflare_token
+from app.keyboards import cancel_reply_keyboard, remove_cloudflare_token
+from app.states import STATE_ADD_CLOUD_TOKEN
 
 router = Router(name="commands-cf-router")
 
@@ -23,9 +24,9 @@ async def add_cloud_token(message: Message, session: AsyncSession, role: str):
     user_id = _message_user_id(message)
     if user_id is None:
         return
-    await user_repo.set_user_state(session, user_id, 'add_cloud_token')
+    await user_repo.set_user_state(session, user_id, STATE_ADD_CLOUD_TOKEN)
     await session.commit()
-    await message.answer('Enter cloudflare token')
+    await message.answer('Enter cloudflare token', reply_markup=cancel_reply_keyboard())
 
 
 @router.message(Command('get_cloud_tokens'))

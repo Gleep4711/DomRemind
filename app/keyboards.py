@@ -1,9 +1,10 @@
 from typing import cast
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import KeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.common import ChangeUserRole, DeleteDomain, CloudFlareTokens, CloudFlareDeleteTokens
+from app.states import CANCEL_TEXT
 
 
 def change_role(roles) -> InlineKeyboardMarkup:
@@ -46,3 +47,15 @@ def confirmation_keyboard(id):
     builder.button(text='❌ Yes, delete this token', callback_data=CloudFlareDeleteTokens(id=str(id)).pack())
     builder.button(text='Cancel', callback_data=DeleteDomain(data='canceled').pack())
     return cast(InlineKeyboardMarkup, builder.adjust(1).as_markup())
+
+
+def cancel_reply_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=CANCEL_TEXT)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def remove_reply_keyboard() -> ReplyKeyboardRemove:
+    return ReplyKeyboardRemove()

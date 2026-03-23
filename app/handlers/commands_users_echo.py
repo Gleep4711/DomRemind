@@ -9,9 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import bot
 from app.db.repositories import users as user_repo
-from app.keyboards import change_role, delete_domain_inline
+from app.keyboards import change_role, delete_domain_inline, remove_reply_keyboard
 from app.services.cron import verify_and_add_token
 from app.services.domain_service import DOMAIN_LIMIT, add_domains as svc_add_domains, get_domain_for_deletion
+from app.states import (
+    CANCEL_TEXT,
+    INPUT_STATES,
+    STATE_ADD_CLOUD_TOKEN,
+    STATE_ADD_DOMAIN,
+    STATE_NONE,
+    STATE_REMOVE_DOMAIN,
+)
 
 router = Router(name="commands-users-echo-router")
 
@@ -28,31 +36,31 @@ def _message_text(message: Message) -> str | None:
 async def cmd_start(message: Message, role: str, session: AsyncSession):
     role_str = role.capitalize() if role else 'Guest'
     msg = dedent('''
-        <b>DomRemind Bot</b>
-
         <b>Your role:</b> <code>{role}</code>
 
         <b>Domains</b>
-        <code>/add_domain</code> Add new domains
-        <code>/get_domains</code> Show all domains
-        <code>/remove_domains</code> Delete domain
-        <i>Limit: {domain_limit} domains per user</i>
-    ''').format(role=role_str, domain_limit=DOMAIN_LIMIT)
+        /add_domain Add new domains
+        /get_domains Show all domains
+        /remove_domains Delete domain
+    ''').format(role=role_str)
+
+    if role == 'guest':
+        msg += '\n<i>Limit: {} domains per user</i>\n'.format(DOMAIN_LIMIT)
 
     if role in ['user', 'admin']:
         msg += dedent('''
 
             <b>Cloudflare</b>
-            <code>/add_cloud_token</code> Add cloudflare token
-            <code>/get_cloud_tokens</code> Show all cloudflare tokens
-            <code>/help_create_new_token</code> Instructions for creating a new token
+            /add_cloud_token Add cloudflare token
+            /get_cloud_tokens Show all cloudflare tokens
+            /help_create_new_token Instructions for creating a new token
         ''')
 
     if role == 'admin':
         msg += dedent('''
 
             <b>Admin</b>
-            <code>/get_users</code> List of all users
+            /get_users List of all users
         ''')
 
     await message.answer(msg)
@@ -113,8 +121,22 @@ async def user_id_handler(message: Message, session: AsyncSession, role: str):
     )
 
 
+@router.message(F.text == CANCEL_TEXT)
+async def cancel_input(message: Message, session: AsyncSession, state: str):
+    user_id = _message_user_id(message)
+    if user_id is None:
+        return
+
+    if state not in INPUT_STATES:
+        return
+
+    await user_repo.set_user_state(session, user_id, STATE_NONE)
+    await session.commit()
+    await message.answer('Canceled', reply_markup=remove_reply_keyboard())
+
+
 @router.message()
-async def echo(message: Message, session: AsyncSession, state: str):
+async def echo(message: Message, session: AsyncSession, state: str, role: str):
     user_id = _message_user_id(message)
     if user_id is None:
         return
@@ -123,16 +145,16 @@ async def echo(message: Message, session: AsyncSession, state: str):
     if text is None:
         return
 
-    if state in ['add_domain', 'remove_domain', 'add_cloud_token']:
-        await user_repo.set_user_state(session, user_id, '')
+    if state in INPUT_STATES:
+        await user_repo.set_user_state(session, user_id, STATE_NONE)
         await session.commit()
 
-    if state == 'add_domain':
+    if state == STATE_ADD_DOMAIN:
         await message.answer('running.... 🏃')
-        await svc_add_domains(session, user_id, text, message.answer)
+        await svc_add_domains(session, user_id, role, text, message.answer)
         return
 
-    if state == 'remove_domain':
+    if state == STATE_REMOVE_DOMAIN:
         text = _message_text(message)
         if text is None:
             await message.answer('Domain not found')
@@ -147,7 +169,7 @@ async def echo(message: Message, session: AsyncSession, state: str):
         )
         return
 
-    if state == 'add_cloud_token':
+    if state == STATE_ADD_CLOUD_TOKEN:
         await verify_and_add_token(session, user_id, text, message.answer, bot)
         return
 

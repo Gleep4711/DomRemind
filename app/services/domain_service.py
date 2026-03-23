@@ -16,13 +16,15 @@ DOMAIN_LIMIT = 10
 async def add_domains(
     session: AsyncSession,
     user_id: int,
+    role: str,
     text: str,
     send_message: Callable[[str], Awaitable[Any]],
 ) -> None:
     current_domains_count = await domain_repo.count_user_domains(session, user_id)
-    if current_domains_count >= DOMAIN_LIMIT:
+    limit_enabled = role == 'guest'
+    if limit_enabled and current_domains_count >= DOMAIN_LIMIT:
         await send_message(
-            'Domain limit reached: <code>{}</code> domains максимум на пользователя.'.format(
+            'Domain limit reached: <code>{}</code> domains maximum per user.'.format(
                 DOMAIN_LIMIT
             )
         )
@@ -50,8 +52,8 @@ async def add_domains(
             msg += '<code>{}</code> already exist\n'.format(domain)
             continue
 
-        if current_domains_count + len(added_domains) >= DOMAIN_LIMIT:
-            msg += 'Domain limit reached: <code>{}</code> domains максимум на пользователя.\n'.format(
+        if limit_enabled and current_domains_count + len(added_domains) >= DOMAIN_LIMIT:
+            msg += 'Domain limit reached: <code>{}</code> domains maximum per user.\n'.format(
                 DOMAIN_LIMIT
             )
             break

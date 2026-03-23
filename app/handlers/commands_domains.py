@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import domains as domain_repo
 from app.db.repositories import users as user_repo
+from app.keyboards import cancel_reply_keyboard
 from app.services.domain_service import DOMAIN_LIMIT
+from app.states import STATE_ADD_DOMAIN, STATE_REMOVE_DOMAIN
 
 router = Router(name="commands-domains-router")
 
@@ -18,17 +20,19 @@ def _message_user_id(message: Message) -> int | None:
 
 
 @router.message(Command('add_domain'))
-async def add_domain(message: Message, session: AsyncSession):
+async def add_domain(message: Message, session: AsyncSession, role: str):
     user_id = _message_user_id(message)
     if user_id is None:
         return
-    await user_repo.set_user_state(session, user_id, 'add_domain')
+    await user_repo.set_user_state(session, user_id, STATE_ADD_DOMAIN)
     await session.commit()
-    await message.answer(
+    msg = (
         'Enter domains\n'
-        'You can enter several domains at once - one domain on one line, no spaces, no commas\n'
-        'Limit: <code>{}</code> domains per user'.format(DOMAIN_LIMIT)
+        'You can enter several domains at once - one domain on one line, no spaces, no commas'
     )
+    if role == 'guest':
+        msg += '\nLimit: <code>{}</code> domains per user'.format(DOMAIN_LIMIT)
+    await message.answer(msg, reply_markup=cancel_reply_keyboard())
 
 
 @router.message(Command('get_domains'))
@@ -72,6 +76,6 @@ async def remove_domains(message: Message, session: AsyncSession):
     user_id = _message_user_id(message)
     if user_id is None:
         return
-    await user_repo.set_user_state(session, user_id, 'remove_domain')
+    await user_repo.set_user_state(session, user_id, STATE_REMOVE_DOMAIN)
     await session.commit()
-    await message.answer('Enter the domain you want to delete')
+    await message.answer('Enter the domain you want to delete', reply_markup=cancel_reply_keyboard())
