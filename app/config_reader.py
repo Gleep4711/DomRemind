@@ -14,8 +14,20 @@ class PydanticSettings(BaseSettings):
 
 config = PydanticSettings()
 
+log_level = getattr(logging, config.LOGGING.upper(), logging.ERROR)
+
 logging.basicConfig(
-    level=getattr(logging, config.LOGGING.upper(), logging.ERROR),
+    level=log_level,
     format="%(levelname)s: %(filename)s:%(lineno)d: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
+    force=True,
 )
+
+# Keep noisy third-party loggers aligned with configured level.
+for logger_name in (
+    "httpx",
+    "httpcore",
+    "sqlalchemy",
+    "apscheduler",
+):
+    logging.getLogger(logger_name).setLevel(log_level)

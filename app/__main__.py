@@ -1,7 +1,6 @@
 import asyncio
 
 from aiogram import F
-from aiogram.types import Message
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -13,7 +12,7 @@ from app.bot import bot, dp, scheduler
 from app.services.cron import notifications, cloudflare_sync
 
 async def main():
-    engine = create_async_engine(url=str(config.DB_URL), echo=True)
+    engine = create_async_engine(url=str(config.DB_URL))
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 
     # Setup dispatcher and bind routers to it

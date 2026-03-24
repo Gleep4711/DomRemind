@@ -14,14 +14,21 @@ from app.whois import get_expired_date
 
 
 async def notifications(bot: Bot, session_pool: async_sessionmaker[AsyncSession]):
+    '''This function checks the expiration date of the domains and sends notifications to users if the domain is expiring soon.'''
+
     async with session_pool() as session:
         domains = await domain_repo.get_all_domains(session)
         for domain in domains:
             if domain.last_check is None or domain.expired_date is None or domain.domain is None:
+                logging.warning('Skipping domain with missing data: id=%s domain=%s', domain.id, domain.domain)
                 continue
 
             last_difference = datetime.now(timezone.utc) - domain.last_check.replace(tzinfo=timezone.utc)
             if last_difference.total_seconds() < 300:
+                logging.debug(
+                    'Skipping recently checked domain: id=%s domain=%s last_check=%s',
+                    domain.id, domain.domain, domain.last_check,
+                )
                 continue
 
             date_difference = domain.expired_date.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
