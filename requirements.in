@@ -27,3 +27,4 @@ yarl
 APScheduler
 whodap
 whois21
+chardet<6

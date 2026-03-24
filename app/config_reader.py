@@ -27,6 +27,9 @@ logging.basicConfig(
 for logger_name in (
     "httpx",
     "httpcore",
+    "requests",
+    "urllib3",
+    "urllib3.connectionpool",
     "sqlalchemy",
     "apscheduler",
 ):

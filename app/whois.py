@@ -25,7 +25,7 @@ no_rdap_zones = [
     'ad', 'ae', 'af', 'ag', 'al', 'am', 'ao', 'ar', 'as', 'at', 'au', 'az',
     'ba', 'bd', 'be', 'bg', 'bf', 'bh', 'bi', 'bj', 'bn', 'bo', 'br', 'bs', 'bt', 'bw', 'by', 'bz',
     'ca', 'cat', 'cd', 'cf', 'cg', 'ch', 'ci', 'ck' 'cl', 'cm', 'cn', 'co', 'cr', 'cu', 'cv', 'cy', 'ce',
-    'de', 'dj', 'dk', 'dm', 'do',' dz',
+    'de', 'dj', 'dk', 'dm', 'do', ' dz',
     'ec', 'ee', 'eg', 'es', 'et',
     'fi', 'fj', 'fm', 'fr',
     'ga', 'ge', 'gg', 'gh', 'gi', 'gl', 'gm', 'gr', 'gt', 'gy',
@@ -47,6 +47,7 @@ no_rdap_zones = [
     'ws',
     'za', 'zm', 'zw'
 ]
+
 
 async def get_expired_date(domain):
     d_data = domain.lower().split('.')
@@ -77,6 +78,7 @@ async def get_whois_21(d_data):
     logging.error(f"WHOIS check did not return an expiration date for domain {domain}: {w.whois_data}")
     return None
 
+
 async def get_whodap(d_data):
     try:
         w = await aio_lookup_domain(domain=d_data[-2], tld=d_data[-1])
@@ -95,4 +97,3 @@ async def get_whodap(d_data):
     except Exception as e:
         logging.error(f"Error getting whodap data for domain {d_data}: {e}")
         return await get_whois_21(d_data)
-

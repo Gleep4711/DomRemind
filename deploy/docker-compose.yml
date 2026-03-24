@@ -9,7 +9,7 @@ services:
             DB_URL: ${DB_URL}
             ADMIN: ${ADMIN}
 
-            LOGGING: error
+            LOGGING: info
 
         networks:
             - main
