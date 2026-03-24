@@ -14,10 +14,8 @@ class PydanticSettings(BaseSettings):
 
 config = PydanticSettings()
 
-log_level = getattr(logging, config.LOGGING.upper(), logging.ERROR)
-
 logging.basicConfig(
-    level=log_level,
+    level=getattr(logging, config.LOGGING.upper(), logging.ERROR),
     format="%(levelname)s: %(filename)s:%(lineno)d: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     force=True,
@@ -33,4 +31,4 @@ for logger_name in (
     "sqlalchemy",
     "apscheduler",
 ):
-    logging.getLogger(logger_name).setLevel(log_level)
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
