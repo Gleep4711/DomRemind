@@ -28,7 +28,19 @@ for logger_name in (
     "requests",
     "urllib3",
     "urllib3.connectionpool",
+    "psycopg",
+    "psycopg.pool",
+    "psycopg.connection",
+    "psycopg.cursor",
+    "chardet",
+    "chardet.charsetprober",
+    "charset_normalizer",
+    "whois21",
+    "log21",
     "sqlalchemy",
     "apscheduler",
 ):
-    logging.getLogger(logger_name).setLevel(logging.ERROR)
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.ERROR)
+    for handler in logger.handlers:
+        handler.setLevel(logging.ERROR)

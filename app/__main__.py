@@ -10,6 +10,7 @@ from app.middlewares import DbSessionMiddleware
 from app.ui_commands import set_ui_commands
 from app.bot import bot, dp, scheduler
 from app.services.cron import notifications, cloudflare_sync
+from app.services.iana_sync import sync_iana_zones
 
 async def main():
     engine = create_async_engine(url=str(config.DB_URL))
@@ -32,8 +33,9 @@ async def main():
     await set_ui_commands(bot)
 
     # We connect the scheduler of regular tasks
-    scheduler.add_job(notifications, 'cron', hour=8, minute=0, args=(bot, sessionmaker))
-    scheduler.add_job(cloudflare_sync, 'cron', hour=7, minute=30, args=(bot, sessionmaker))
+    scheduler.add_job(notifications, 'cron', hour=8, minute=0, args=(bot, sessionmaker), id='notifications')
+    scheduler.add_job(cloudflare_sync, 'cron', hour=7, minute=30, args=(bot, sessionmaker), id='cloudflare_sync')
+    scheduler.add_job(sync_iana_zones, 'cron', day_of_week='fri', hour=3, minute=0, args=(bot, sessionmaker), id='iana_sync')
     scheduler.start()
 
     await bot.send_message(chat_id=config.ADMIN, text='Bot is starting...')

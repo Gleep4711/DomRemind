@@ -62,7 +62,7 @@ async def add_domains(
         expires_date = (
             domain_row.expired_date
             if domain_row and domain_row.expired_date
-            else await get_expired_date(domain)
+            else await get_expired_date(session, domain)
         )
 
         if expires_date:

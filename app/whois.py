@@ -4,8 +4,11 @@ import logging
 from typing import Any, cast
 
 from dateutil.parser import parse
+from sqlalchemy.ext.asyncio import AsyncSession
 from whodap import aio_lookup_domain
 from whois21 import WHOIS
+
+from app.db.repositories import tld_zones as tld_zones_repo
 
 records = [
     'expires    on',
@@ -21,23 +24,25 @@ records = [
     'registrar registration expiration date',
     'registry expiry date'
 ]
-no_rdap_zones = [
+
+# Legacy fallback for zones that are not found in DB.
+no_rdap_zones: frozenset[str] = frozenset([
     'ad', 'ae', 'af', 'ag', 'al', 'am', 'ao', 'ar', 'as', 'at', 'au', 'az',
     'ba', 'bd', 'be', 'bg', 'bf', 'bh', 'bi', 'bj', 'bn', 'bo', 'br', 'bs', 'bt', 'bw', 'by', 'bz',
-    'ca', 'cat', 'cd', 'cf', 'cg', 'ch', 'ci', 'ck' 'cl', 'cm', 'cn', 'co', 'cr', 'cu', 'cv', 'cy', 'ce',
-    'de', 'dj', 'dk', 'dm', 'do', ' dz',
+    'ca', 'cat', 'cd', 'cf', 'cg', 'ch', 'ci', 'ck', 'cl', 'cm', 'cn', 'co', 'cr', 'cu', 'cv', 'cy',
+    'de', 'dj', 'dk', 'dm', 'do', 'dz',
     'ec', 'ee', 'eg', 'es', 'et',
     'fi', 'fj', 'fm', 'fr',
     'ga', 'ge', 'gg', 'gh', 'gi', 'gl', 'gm', 'gr', 'gt', 'gy',
     'hk', 'hn', 'hr', 'ht', 'hu',
-    'id', 'ie', 'il', 'im', 'il', 'im', 'in', 'iq', 'is', 'it',
+    'id', 'ie', 'il', 'im', 'in', 'iq', 'is', 'it',
     'je', 'jm', 'jo',
     'ke', 'kh', 'ki', 'kg', 'kr', 'kw', 'kz',
     'la', 'lb', 'li', 'lk', 'ls', 'lt', 'lu', 'lv', 'ly',
-    'ma', 'md', 'me', 'mg', 'mk', 'ml', 'mm', 'mn', 'my', 'mu', 'mv', 'mw', 'mx', 'my', 'mz',
+    'ma', 'md', 'me', 'mg', 'mk', 'ml', 'mm', 'mn', 'mu', 'mv', 'mw', 'mx', 'my', 'mz',
     'na', 'ng', 'ni', 'ne', 'nl', 'no', 'np', 'nr', 'nu', 'nz',
     'om',
-    'pa', 'pe', 'pg', 'ph', 'pk', 'pl', 'pn,' 'pr', 'ps', 'pt', 'py',
+    'pa', 'pe', 'pg', 'ph', 'pk', 'pl', 'pn', 'pr', 'ps', 'pt', 'py',
     'qa',
     'ro', 'rs', 'ru', 'rw',
     'sa', 'sb', 'sc', 'se', 'sg', 'sh', 'si', 'sk', 'sl', 'sn', 'so', 'sm', 'sr', 'st', 'sv',
@@ -45,14 +50,19 @@ no_rdap_zones = [
     'ua', 'ug', 'uk', 'uy', 'uz',
     'vc', 've', 'vi', 'vn', 'vu',
     'ws',
-    'za', 'zm', 'zw'
-]
+    'za', 'zm', 'zw',
+])
 
-
-async def get_expired_date(domain):
+async def get_expired_date(session: AsyncSession, domain: str):
     d_data = domain.lower().split('.')
+    tld = d_data[-1]
     try:
-        if d_data[-1] in no_rdap_zones:
+        zone_has_rdap = await tld_zones_repo.get_zone_has_rdap(session, tld)
+        if zone_has_rdap is None:
+            use_whois = tld in no_rdap_zones
+        else:
+            use_whois = not zone_has_rdap
+        if use_whois:
             return await get_whois_21(d_data)
         else:
             return await get_whodap(d_data)

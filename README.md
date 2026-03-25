@@ -2,6 +2,8 @@
 
 DomRemind is a Telegram bot for tracking domain expiration dates, sending reminders, and managing domains in one place.
 
+For domain checks, the project uses `whodap` for RDAP zones and `whois21` for custom WHOIS parsing.
+
 ## Features
 
 - Add and manage domains directly from Telegram

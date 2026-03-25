@@ -35,7 +35,7 @@ async def notifications(bot: Bot, session_pool: async_sessionmaker[AsyncSession]
             if date_difference.days > 60:
                 continue
 
-            expires_date = await get_expired_date(domain.domain)
+            expires_date = await get_expired_date(session, domain.domain)
             if expires_date:
                 await domain_repo.update_domain_expiry(session, domain.domain, expires_date)
                 await session.commit()
@@ -160,7 +160,7 @@ async def pull_all_domains(
         expires_date = (
             domain_row.expired_date
             if domain_row and domain_row.expired_date
-            else await get_expired_date(domain_name)
+            else await get_expired_date(session, domain_name)
         )
 
         if expires_date:

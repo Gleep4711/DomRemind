@@ -1,5 +1,6 @@
 from asyncio import sleep
 from datetime import datetime, timedelta
+import asyncio
 import logging
 from textwrap import dedent
 
@@ -14,7 +15,8 @@ from app.db.repositories import domains as domain_repo
 from app.db.repositories import users as user_repo
 from app.keyboards import cancel_reply_keyboard, change_role, delete_domain_inline, remove_reply_keyboard
 from app.services.cron import verify_and_add_token
-from app.services.domain_service import DOMAIN_LIMIT, add_domains as svc_add_domains, get_domain_for_deletion
+from app.services.domain_service import DOMAIN_LIMIT, add_domains, get_domain_for_deletion
+from app.bot import scheduler
 from app.states import (
     CANCEL_TEXT,
     INPUT_STATES,
@@ -69,9 +71,23 @@ async def cmd_start(message: Message, role: str, session: AsyncSession):
             <b>Admin</b>
             /get_users List of all users
             /get_stats Show summary statistics
+            /sync_zones Sync TLD zones from IANA
         ''')
 
     await message.answer(msg)
+
+
+@router.message(Command('sync_zones'))
+async def sync_zones(message: Message, role: str):
+    if role != 'admin':
+        return
+
+    job = scheduler.get_job('iana_sync')
+    if job is None:
+        await message.answer('Sync job not found.')
+        return
+    asyncio.create_task(job.func(*job.args))
+    await message.answer('IANA zones sync started in background.')
 
 
 @router.message(Command('get_users'))
@@ -237,7 +253,7 @@ async def echo(message: Message, session: AsyncSession, state: str, role: str):
                 reply_markup=remove_reply_keyboard(),
             )
         await message.answer('running.... 🏃')
-        await svc_add_domains(session, user_id, role, text, message.answer)
+        await add_domains(session, user_id, role, text, message.answer)
         return
 
     if state == STATE_REMOVE_DOMAIN:

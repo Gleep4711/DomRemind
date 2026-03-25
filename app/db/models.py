@@ -49,3 +49,12 @@ class Settings(Base):
     name: Mapped[Optional[str]] = mapped_column(String, default='')
     group: Mapped[Optional[str]] = mapped_column(String, default='')
     param: Mapped[Optional[str]] = mapped_column(String, default='')
+
+
+class TldZone(Base):
+    __tablename__ = 'tld_zones'
+
+    tld: Mapped[str] = mapped_column(String, primary_key=True)
+    has_rdap: Mapped[bool] = mapped_column(default=False)
+    rdap_url: Mapped[Optional[str]] = mapped_column(String)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
