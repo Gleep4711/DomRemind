@@ -12,10 +12,16 @@ services:
             LOGGING: ${LOGGING:-ERROR}
 
         volumes:
-            - ./app:/code/app
+            - ./app:/code/app:ro
+            - ./alembic:/code/alembic
 
         networks:
             - main
+
+        # command:
+        #     - bash
+        #     - -c
+        #     - "alembic revision --autogenerate -m 'create tld_zones table'"
 
 networks:
     main:

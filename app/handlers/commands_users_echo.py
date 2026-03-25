@@ -87,7 +87,6 @@ async def sync_zones(message: Message, role: str):
         await message.answer('Sync job not found.')
         return
     asyncio.create_task(job.func(*job.args))
-    await message.answer('IANA zones sync started in background.')
 
 
 @router.message(Command('get_users'))
