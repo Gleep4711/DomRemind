@@ -3,7 +3,7 @@ import logging
 from pydantic import PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings
 
-import httpx._main
+import httpx
 
 class PydanticSettings(BaseSettings):
     BOT_TOKEN: SecretStr = SecretStr("")
@@ -57,4 +57,8 @@ for logger_name in (
         handler.setLevel(logging.ERROR)
 
 # Disable httpx debug logging
-httpx._main.trace = lambda *args, **kwargs: None
+for modname in ("main", "_main"):
+    mod = getattr(httpx, modname, None)
+    if mod and hasattr(mod, "trace"):
+        mod.trace = lambda *args, **kwargs: None
+        break
