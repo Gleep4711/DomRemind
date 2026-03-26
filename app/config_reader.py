@@ -3,6 +3,7 @@ import logging
 from pydantic import PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings
 
+import httpx._main
 
 class PydanticSettings(BaseSettings):
     BOT_TOKEN: SecretStr = SecretStr("")
@@ -14,47 +15,46 @@ class PydanticSettings(BaseSettings):
 
 config = PydanticSettings()
 
-log_level = getattr(logging, config.LOGGING.upper(), logging.ERROR)
-
 logging.basicConfig(
-    level=log_level,
+    level=getattr(logging, config.LOGGING.upper(), logging.ERROR),
     format="%(levelname)s: %(filename)s:%(lineno)d: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     force=True,
 )
-logging.getLogger().setLevel(log_level)
 
 # Keep noisy third-party loggers aligned with configured level.
 for logger_name in (
     "httpx",
-    "httpcore",
+    # "httpcore",
     "requests",
-    "urllib3",
-    "urllib3.connectionpool",
-    "psycopg",
-    "psycopg.pool",
-    "psycopg.connection",
-    "psycopg.cursor",
-    "chardet",
-    "chardet.charsetprober",
-    "charset_normalizer",
+    # "urllib3",
+    # "urllib3.connectionpool",
+    # "psycopg",
+    # "psycopg.pool",
+    # "psycopg.connection",
+    # "psycopg.cursor",
+    # "chardet",
+    # "chardet.charsetprober",
+    # "charset_normalizer",
     "whois21",
     "log21",
-    "sqlalchemy",
-    "sqlalchemy.engine",
-    "sqlalchemy.engine.Engine",
-    "sqlalchemy.engine.base",
-    "sqlalchemy.pool",
-    "sqlalchemy.pool.base",
-    "sqlalchemy.pool.impl",
-    "sqlalchemy.pool.impl.AsyncAdaptedQueuePool",
-    "sqlalchemy.dialects",
-    "apscheduler",
+    # "sqlalchemy",
+    # "sqlalchemy.engine",
+    # "sqlalchemy.engine.Engine",
+    # "sqlalchemy.engine.base",
+    # "sqlalchemy.pool",
+    # "sqlalchemy.pool.base",
+    # "sqlalchemy.pool.impl",
+    # "sqlalchemy.pool.impl.AsyncAdaptedQueuePool",
+    # "sqlalchemy.dialects",
+    # "apscheduler",
 ):
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.ERROR)
-    # Avoid re-emitting SQLAlchemy internals through parent logger chains.
-    if logger_name.startswith("sqlalchemy"):
-        logger.propagate = False
+    # if logger_name in ("httpx", "httpcore", "sqlalchemy"):
+    #     logger.propagate = False
     for handler in logger.handlers:
         handler.setLevel(logging.ERROR)
+
+# Disable httpx debug logging
+httpx._main.trace = lambda *args, **kwargs: None

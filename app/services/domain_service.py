@@ -66,6 +66,8 @@ async def add_domains(
         )
 
         if expires_date:
+            if expires_date.tzinfo is None:
+                expires_date = expires_date.replace(tzinfo=timezone.utc)
             if domain_row is None:
                 domain_row = await domain_repo.create_domain(session, domain, expires_date)
             elif domain_row.expired_date is None:
