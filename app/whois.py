@@ -20,6 +20,8 @@ records = [
     'free-date',
     'free_date',
     'expiration date',
+    'expiration',
+    'registrar expiration',
     'registrar expiration date',
     'registrar registration expiration date',
     'registry expiry date'

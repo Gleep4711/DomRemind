@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import logging
 from typing import Any, Awaitable, Callable
 
-import requests
+import httpx
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -72,12 +72,13 @@ async def new_user_notification(bot: Bot, msg: str):
     await bot.send_message(chat_id=config.ADMIN, text=msg)
 
 
-def check_cloud_token(token: str) -> str | bool:
+async def check_cloud_token(token: str) -> str | bool:
     try:
-        response = requests.get(
-            'https://api.cloudflare.com/client/v4/user/tokens/verify',
-            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-        )
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                'https://api.cloudflare.com/client/v4/user/tokens/verify',
+                headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            )
     except Exception as e:
         logging.error('Error verifying Cloudflare token: %s', e)
         return False
@@ -99,10 +100,11 @@ async def pull_all_domains(
     token: str, user_id: int, bot: Bot, session: AsyncSession, page: int = 1
 ) -> bool | int:
     try:
-        response = requests.get(
-            'https://api.cloudflare.com/client/v4/zones?page=' + str(page),
-            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-        )
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                'https://api.cloudflare.com/client/v4/zones?page=' + str(page),
+                headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            )
     except Exception as e:
         logging.error('Error pulling domains for user %s with token %s: %s', user_id, token, e)
         await send_error_sync_message(bot=bot, user_id=user_id, token=token)
@@ -260,7 +262,7 @@ async def verify_and_add_token(
         return
 
     await send_message('Checking... 🕹')
-    check_result = check_cloud_token(token)
+    check_result = await check_cloud_token(token)
     if not check_result:
         logging.error('Error: Invalid cloudflare token. User ID: %s', user_id)
         await send_message('Error: token no valid')

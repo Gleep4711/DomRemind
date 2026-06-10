@@ -10,4 +10,4 @@ bot = Bot(
 	default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 dp = Dispatcher()
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(job_defaults={'misfire_grace_time': 3600, 'coalesce': True})

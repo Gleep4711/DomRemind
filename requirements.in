@@ -9,6 +9,7 @@ certifi
 charset-normalizer
 frozenlist
 greenlet
+httpx
 idna
 magic-filter
 Mako
