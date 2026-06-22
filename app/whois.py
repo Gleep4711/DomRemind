@@ -47,6 +47,8 @@ no_rdap_zones: frozenset[str] = frozenset([
     'pa', 'pe', 'pg', 'ph', 'pk', 'pl', 'pn', 'pr', 'ps', 'pt', 'py',
     'qa',
     'ro', 'rs', 'ru', 'rw',
+    # IDN ccTLDs without RDAP (ACE form); .рф = xn--p1ai
+    'xn--p1ai',
     'sa', 'sb', 'sc', 'se', 'sg', 'sh', 'si', 'sk', 'sl', 'sn', 'so', 'sm', 'sr', 'st', 'sv',
     'td', 'tg', 'th', 'tj', 'tl', 'tm', 'tn', 'to', 'tt', 'tw', 'tz',
     'ua', 'ug', 'uk', 'uy', 'uz',
@@ -56,6 +58,16 @@ no_rdap_zones: frozenset[str] = frozenset([
 ])
 
 async def get_expired_date(session: AsyncSession, domain: str):
+    # Normalize IDN (e.g. Cyrillic) domains to ACE/Punycode before any lookup.
+    # WHOIS servers and RDAP only accept ASCII labels
+    try:
+        domain = '.'.join(
+            label.encode('idna').decode('ascii')
+            for label in domain.lower().split('.')
+        )
+    except (UnicodeError, UnicodeDecodeError):
+        logging.warning('IDNA encoding failed for domain %r; proceeding as-is', domain)
+
     d_data = domain.lower().split('.')
     tld = d_data[-1]
     try:
