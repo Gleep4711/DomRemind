@@ -8,6 +8,8 @@ class PydanticSettings(BaseSettings):
     DB_URL: PostgresDsn = PostgresDsn("postgresql://user:password@localhost/dbname")
     ADMIN: int = 0
 
+    WHOISJSON_API_KEY: SecretStr = SecretStr("")
+
     LOGGING: str = "ERROR"
 
 

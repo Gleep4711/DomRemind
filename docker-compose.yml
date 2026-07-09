@@ -9,6 +9,8 @@ services:
             DB_URL: ${DB_URL}
             ADMIN: ${ADMIN}
 
+            WHOISJSON_API_KEY: ${WHOISJSON_API_KEY}
+
             LOGGING: ${LOGGING:-ERROR}
 
         volumes:

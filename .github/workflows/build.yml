@@ -16,5 +16,6 @@ jobs:
                   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
                   DB_URL: ${{ secrets.DB_URL }}
                   ADMIN: ${{ secrets.ADMIN }}
+                  WHOISJSON_API_KEY: ${{ secrets.WHOISJSON_API_KEY }}
               run: |
                   docker compose -f ./deploy/docker-compose.yml up -d --build

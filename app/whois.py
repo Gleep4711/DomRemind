@@ -1,14 +1,19 @@
-from asyncio import to_thread
-from datetime import timezone
 import logging
+from asyncio import to_thread
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from dateutil.parser import parse
+from dateutil.relativedelta import relativedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from whodap import aio_lookup_domain
 from whois21 import WHOIS
 
 from app.db.repositories import tld_zones as tld_zones_repo
+
+# TLDs where the registry WHOIS server never publishes expiry dates.
+# Domains in these zones are tracked with an estimated expiry (creation + 1 year).
+UNSUPPORTED_ZONES: frozenset[str] = frozenset(['ro'])
 
 records = [
     'expires    on',
@@ -100,6 +105,38 @@ async def get_whois_21(d_data):
         if key.lower() in records:
             return parse(str(w.whois_data[key])).replace(tzinfo=timezone.utc)
     logging.error(f"WHOIS check did not return an expiration date for domain {domain}: {w.whois_data}")
+    return None
+
+
+_creation_records = [
+    'registered on',
+    'registered',
+    'created on',
+    'creation date',
+    'created',
+    'domain registration date',
+]
+
+
+async def get_estimated_expiry_for_unsupported(d_data: list[str]) -> 'datetime | None':
+    """Return creation_date + 1 year for zones that never publish expiry via WHOIS/RDAP."""
+    domain = '{}.{}'.format(d_data[-2], d_data[-1])
+    try:
+        w = await to_thread(WHOIS, domain)
+    except Exception as e:
+        logging.error('WHOIS error for unsupported zone %s: %s', domain, e)
+        return None
+    if not w.success:
+        logging.error('WHOIS failed for unsupported zone %s: %s', domain, w.error)
+        return None
+    for key in w.whois_data:
+        if key.lower() in _creation_records:
+            try:
+                create_date = parse(str(w.whois_data[key])).replace(tzinfo=timezone.utc)
+                return create_date + relativedelta(years=1)
+            except Exception as e:
+                logging.error('Cannot parse creation date for %s from %r: %s', domain, w.whois_data[key], e)
+    logging.error('No creation date field found in WHOIS for %s: %s', domain, list(w.whois_data.keys()))
     return None
 
 

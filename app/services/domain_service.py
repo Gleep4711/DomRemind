@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Domains
 from app.db.repositories import domains as domain_repo
-from app.whois import get_expired_date
+from app.services.whois_json import get_expiry_from_whoisjson
+from app.whois import UNSUPPORTED_ZONES, get_estimated_expiry_for_unsupported, get_expired_date
 
 
 DOMAIN_LIMIT = 10
@@ -58,12 +59,25 @@ async def add_domains(
             )
             break
 
+        tld = d_data[-1].lower()
         domain_row = await domain_repo.get_domain_by_name(session, domain)
-        expires_date = (
-            domain_row.expired_date
-            if domain_row and domain_row.expired_date
-            else await get_expired_date(session, domain)
-        )
+
+        if tld in UNSUPPORTED_ZONES:
+            if domain_row and domain_row.expired_date:
+                expires_date = domain_row.expired_date
+                is_estimated = False
+            else:
+                expires_date = await get_estimated_expiry_for_unsupported(d_data)
+                is_estimated = True
+        else:
+            expires_date = (
+                domain_row.expired_date
+                if domain_row and domain_row.expired_date
+                else await get_expired_date(session, domain)
+            )
+            if expires_date is None:
+                expires_date = await get_expiry_from_whoisjson(domain)
+            is_estimated = False
 
         if expires_date:
             if expires_date.tzinfo is None:
@@ -74,14 +88,21 @@ async def add_domains(
                 domain_row.expired_date = expires_date
                 domain_row.last_check = datetime.now(timezone.utc)
 
-            await domain_repo.link_user_domain(session, user_id, domain_row.id)
+            await domain_repo.link_user_domain(session, user_id, domain_row.id, source='manual')
             date_difference = expires_date - datetime.now(timezone.utc)
-            msg += '<code>{}</code>: {:%d.%m.%Y} [ {}{} day ]\n'.format(
-                domain,
-                expires_date,
-                '❗️' if date_difference.days < 30 else '',
-                date_difference.days,
-            )
+
+            if is_estimated:
+                msg += (
+                    '⚠️ <code>{}</code>: zone .{} has no public expiry data. '
+                    'Estimated: {:%d.%m.%Y} (~{} days, based on registration date)\n'
+                ).format(domain, tld, expires_date, date_difference.days)
+            else:
+                msg += '<code>{}</code>: {:%d.%m.%Y} [ {}{} day ]\n'.format(
+                    domain,
+                    expires_date,
+                    '❗️' if date_difference.days < 30 else '',
+                    date_difference.days,
+                )
             added_domains.append(domain)
         else:
             msg += '<code>{}</code> error: domain not added\n'.format(domain)

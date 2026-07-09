@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, func, select, update
@@ -50,8 +51,10 @@ async def create_domain(session: AsyncSession, domain_name: str, expired_date: d
     return domain_row
 
 
-async def link_user_domain(session: AsyncSession, user_id: int, domain_id: int) -> None:
-    session.add(UserDomain(user_id=user_id, domain_id=domain_id))
+async def link_user_domain(
+    session: AsyncSession, user_id: int, domain_id: int, source: str = 'manual'
+) -> None:
+    session.add(UserDomain(user_id=user_id, domain_id=domain_id, source=source))
 
 
 async def get_domain_for_user(
@@ -83,8 +86,46 @@ async def delete_domain_if_orphan(session: AsyncSession, domain_id: int) -> None
 
 
 async def get_all_domains(session: AsyncSession) -> list[Domains]:
-    result = await session.execute(select(Domains))
+    result = await session.execute(
+        select(Domains)
+        .join(UserDomain, UserDomain.domain_id == Domains.id)
+        .distinct()
+    )
     return list(result.scalars())
+
+
+async def unlink_user_cf_domains_not_in(
+    session: AsyncSession, user_id: int, current_cf_domains: set[str]
+) -> None:
+    """Remove CF-sourced UserDomain links for domains no longer present in Cloudflare.
+
+    Does NOT delete the Domains row — the row stays as a WHOIS cache entry.
+    """
+    result = await session.execute(
+        select(UserDomain.domain_id, Domains.domain)
+        .join(Domains, Domains.id == UserDomain.domain_id)
+        .filter(UserDomain.user_id == user_id, UserDomain.source == 'cloudflare')
+    )
+    for domain_id, domain_name in result.all():
+        if domain_name not in current_cf_domains:
+            await session.execute(
+                delete(UserDomain).filter(
+                    UserDomain.user_id == user_id,
+                    UserDomain.domain_id == domain_id,
+                )
+            )
+            logging.info(
+                'CF domain unlinked (removed from Cloudflare): user_id=%s domain=%s',
+                user_id, domain_name,
+            )
+
+
+async def touch_last_check(session: AsyncSession, domain_name: str) -> None:
+    await session.execute(
+        update(Domains)
+        .filter(Domains.domain == domain_name)
+        .values(last_check=datetime.now(timezone.utc))
+    )
 
 
 async def update_domain_expiry(

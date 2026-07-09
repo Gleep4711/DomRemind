@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config_reader import config
 from app.db.repositories import domains as domain_repo
 from app.db.repositories import settings as settings_repo
-from app.whois import get_expired_date
+from app.services.whois_json import get_expiry_from_whoisjson
+from app.whois import UNSUPPORTED_ZONES, get_estimated_expiry_for_unsupported, get_expired_date
+
+# Days before estimated expiry at which to notify users of unsupported-zone domains.
+# Sorted ascending so threshold-tracking picks the tightest applicable window first.
+ESTIMATED_NOTIFICATION_DAYS: tuple[int, ...] = (3, 7, 30)
 
 
 async def notifications(bot: Bot, session_pool: async_sessionmaker[AsyncSession]):
@@ -19,16 +24,55 @@ async def notifications(bot: Bot, session_pool: async_sessionmaker[AsyncSession]
     async with session_pool() as session:
         domains = await domain_repo.get_all_domains(session)
         for domain in domains:
-            if domain.last_check is None or domain.expired_date is None or domain.domain is None:
+            if domain.expired_date is None or domain.domain is None:
                 logging.warning('Skipping domain with missing data: id=%s domain=%s', domain.id, domain.domain)
                 continue
 
-            last_difference = datetime.now(timezone.utc) - domain.last_check.replace(tzinfo=timezone.utc)
-            if last_difference.total_seconds() < 300:
-                logging.debug(
-                    'Skipping recently checked domain: id=%s domain=%s last_check=%s',
-                    domain.id, domain.domain, domain.last_check,
+            # Anti-spam: skip domains checked in the last 5 minutes.
+            if domain.last_check is not None:
+                last_difference = datetime.now(timezone.utc) - domain.last_check.replace(tzinfo=timezone.utc)
+                if last_difference.total_seconds() < 300:
+                    logging.debug(
+                        'Skipping recently checked domain: id=%s domain=%s last_check=%s',
+                        domain.id, domain.domain, domain.last_check,
+                    )
+                    continue
+
+            tld = domain.domain.rsplit('.', 1)[-1].lower()
+
+            if tld in UNSUPPORTED_ZONES:
+                # Estimated expiry path: send notifications at 30 / 7 / 3 days.
+                # last_check is used as a "threshold already notified" marker:
+                # if (expired_date - last_check).days <= current_threshold, the
+                # notification for that threshold has already been sent.
+                days = (domain.expired_date.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).days
+
+                current_threshold = next(
+                    (t for t in ESTIMATED_NOTIFICATION_DAYS if days <= t), None
                 )
+                if current_threshold is None:
+                    continue  # more than 30 days away
+
+                if domain.last_check is not None:
+                    days_at_last_check = (
+                        domain.expired_date.replace(tzinfo=timezone.utc)
+                        - domain.last_check.replace(tzinfo=timezone.utc)
+                    ).days
+                    if days_at_last_check <= current_threshold:
+                        continue  # already notified for this threshold
+
+                msg = (
+                    '⚠️ <code>{}</code> [ {:%d.%m.%Y} ] estimated expiry: {} days '
+                    '(zone .{} — date is approximate, based on registration date)'
+                ).format(domain.domain, domain.expired_date, days, tld)
+                await send_message_all_users_with_a_domain(msg, domain.domain, bot, session)
+                await domain_repo.touch_last_check(session, domain.domain)
+                await session.commit()
+                await sleep(1)
+                continue
+
+            # Standard expiry check path.
+            if domain.last_check is None:
                 continue
 
             date_difference = domain.expired_date.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
@@ -36,6 +80,16 @@ async def notifications(bot: Bot, session_pool: async_sessionmaker[AsyncSession]
                 continue
 
             expires_date = await get_expired_date(session, domain.domain)
+            if expires_date is None:
+                try:
+                    await bot.send_message(
+                        chat_id=config.ADMIN,
+                        text='⚠️ Domain check failed: <code>{}</code>'.format(domain.domain),
+                    )
+                except Exception:
+                    pass
+                expires_date = await get_expiry_from_whoisjson(domain.domain)
+
             if expires_date:
                 await domain_repo.update_domain_expiry(session, domain.domain, expires_date)
                 await session.commit()
@@ -97,8 +151,12 @@ async def check_cloud_token(token: str) -> str | bool:
 
 
 async def pull_all_domains(
-    token: str, user_id: int, bot: Bot, session: AsyncSession, page: int = 1
-) -> bool | int:
+    token: str, user_id: int, bot: Bot, session: AsyncSession,
+    page: int = 1, _seen: set[str] | None = None,
+) -> tuple[int, set[str]] | bool:
+    if _seen is None:
+        _seen = set()
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(
@@ -132,9 +190,10 @@ async def pull_all_domains(
         user_id, page, len(result_items), total_pages_raw,
     )
 
-    added_domains: list[str] = []
+    added_count = 0
     for domain_data in result_items:
         domain_name: str = domain_data['name']
+        _seen.add(domain_name)
         logging.debug('Processing domain from Cloudflare: user_id=%s domain=%s', user_id, domain_name)
 
         d_data = domain_name.split('.')
@@ -150,25 +209,34 @@ async def pull_all_domains(
             )
             continue
 
-        if domain_name in added_domains:
-            logging.debug('Skipping duplicate domain in current batch: user_id=%s domain=%s', user_id, domain_name)
-            continue
-
         if await domain_repo.find_user_domain_link(session, user_id, domain_name):
             logging.debug('Skipping domain already present in DB: user_id=%s domain=%s', user_id, domain_name)
             continue
 
+        tld = domain_name.split('.')[-1].lower()
         domain_row = await domain_repo.get_domain_by_name(session, domain_name)
-        expires_date = (
-            domain_row.expired_date
-            if domain_row and domain_row.expired_date
-            else await get_expired_date(session, domain_name)
-        )
+
+        if tld in UNSUPPORTED_ZONES:
+            if domain_row and domain_row.expired_date:
+                expires_date = domain_row.expired_date
+                is_estimated = False
+            else:
+                expires_date = await get_estimated_expiry_for_unsupported(domain_name.split('.'))
+                is_estimated = True
+        else:
+            expires_date = (
+                domain_row.expired_date
+                if domain_row and domain_row.expired_date
+                else await get_expired_date(session, domain_name)
+            )
+            if expires_date is None:
+                expires_date = await get_expiry_from_whoisjson(domain_name)
+            is_estimated = False
 
         if expires_date:
             logging.debug(
-                'Domain expiration received: user_id=%s domain=%s expires_date=%s',
-                user_id, domain_name, expires_date,
+                'Domain expiration received: user_id=%s domain=%s expires_date=%s estimated=%s',
+                user_id, domain_name, expires_date, is_estimated,
             )
             if domain_row is None:
                 domain_row = await domain_repo.create_domain(session, domain_name, expires_date)
@@ -176,17 +244,36 @@ async def pull_all_domains(
                 domain_row.expired_date = expires_date
                 domain_row.last_check = datetime.now(timezone.utc)
 
-            await domain_repo.link_user_domain(session, user_id, domain_row.id)
+            await domain_repo.link_user_domain(session, user_id, domain_row.id, source='cloudflare')
             await session.commit()
 
-            added_domains.append(domain_name)
+            added_count += 1
 
             date_difference = expires_date - datetime.now(timezone.utc)
             logging.debug(
-                'Domain added: user_id=%s domain=%s days_left=%s',
-                user_id, domain_name, date_difference.days,
+                'Domain added: user_id=%s domain=%s days_left=%s estimated=%s',
+                user_id, domain_name, date_difference.days, is_estimated,
             )
-            if date_difference.days < 30:
+
+            if is_estimated:
+                msg = (
+                    '⚠️ <code>{}</code> added. Zone .{} has no public expiry data.\n'
+                    'Estimated expiry: {:%d.%m.%Y} (~{} days, based on registration date)'
+                ).format(domain_name, tld, expires_date, date_difference.days)
+                try:
+                    await bot.send_message(chat_id=user_id, text=msg)
+                except Exception:
+                    logging.error(
+                        'Failed to send .%s domain notice, notifying admin: user_id=%s domain=%s',
+                        tld, user_id, domain_name,
+                    )
+                    await bot.send_message(
+                        chat_id=config.ADMIN,
+                        text='Error send message\nuser id: {}\ntoken: {}\ndomain: {}'.format(
+                            user_id, token, domain_name
+                        ),
+                    )
+            elif date_difference.days < 30:
                 msg = '<code>{}</code>: {:%d.%m.%Y} [ {}{} day ]\n'.format(
                     domain_name, expires_date, '❗️', date_difference.days
                 )
@@ -219,23 +306,43 @@ async def pull_all_domains(
             user_id, page, total_pages,
         )
         await sleep(1)
-        await pull_all_domains(token=token, user_id=user_id, bot=bot, session=session, page=(page + 1))
+        sub = await pull_all_domains(
+            token=token, user_id=user_id, bot=bot, session=session, page=page + 1, _seen=_seen
+        )
+        if sub is False:
+            return False
+        if isinstance(sub, tuple):
+            added_count += sub[0]
 
     logging.debug(
-        'pull_all_domains finished: user_id=%s page=%s added_count=%s',
-        user_id, page, len(added_domains),
+        'pull_all_domains finished: user_id=%s page=%s added_count=%s seen=%s',
+        user_id, page, added_count, len(_seen),
     )
-    return len(added_domains)
+    return (added_count, _seen)
 
 
 async def cloudflare_sync(bot: Bot, session_pool: async_sessionmaker[AsyncSession]):
     async with session_pool() as session:
         tokens = await settings_repo.get_all_cf_tokens(session)
+
+        # Group tokens by user so we can aggregate all CF domains per user
+        # and cleanly unlink domains removed from Cloudflare.
+        user_tokens: dict[int, list[str]] = {}
         for token in tokens:
-            if token.param is None:
-                continue
-            await pull_all_domains(token.param, token.user_id, bot, session)
-            await sleep(5)
+            if token.param is not None:
+                user_tokens.setdefault(token.user_id, []).append(token.param)
+
+        for user_id, token_list in user_tokens.items():
+            all_cf_domains: set[str] = set()
+            for token in token_list:
+                result = await pull_all_domains(token, user_id, bot, session)
+                if isinstance(result, tuple):
+                    all_cf_domains.update(result[1])
+                await sleep(5)
+
+            # Unlink CF-sourced domains no longer present in Cloudflare
+            await domain_repo.unlink_user_cf_domains_not_in(session, user_id, all_cf_domains)
+            await session.commit()
 
 
 async def send_error_sync_message(bot: Bot, user_id: int, token: str):
@@ -271,8 +378,8 @@ async def verify_and_add_token(
     await settings_repo.add_cf_token(session, user_id, token)
     await session.commit()
     await send_message(str(check_result))
-    domains_quantity = await pull_all_domains(token, user_id, bot, session)
-    if isinstance(domains_quantity, int):
-        await send_message('Sync finished, {} domains added'.format(domains_quantity))
-    elif domains_quantity is False:
+    result = await pull_all_domains(token, user_id, bot, session)
+    if isinstance(result, tuple):
+        await send_message('Sync finished, {} domains added'.format(result[0]))
+    elif result is False:
         await send_message('Sync finished with errors')

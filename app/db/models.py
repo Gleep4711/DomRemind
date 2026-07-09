@@ -39,6 +39,7 @@ class UserDomain(Base):
 
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     domain_id: Mapped[int] = mapped_column(ForeignKey('domains.id', ondelete='CASCADE'), primary_key=True)
+    source: Mapped[str] = mapped_column(String(32), server_default='manual')
 
 
 class Settings(Base):
